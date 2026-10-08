@@ -19,6 +19,10 @@
 #   make build CHIP=penguin26 PLATFORM=SIMS RVV_TYPE=2 TARGET=saturn-bmarks    # all of them
 ########################################################################################################################
 
+if (NOT CHIP STREQUAL "penguin26")
+  return()
+endif()
+
 set(SATURN_BENCH_DIR "${CMAKE_SOURCE_DIR}/../../generators/saturn/benchmarks"
     CACHE PATH "generators/saturn/benchmarks directory (sources are used in place)")
 get_filename_component(_penguin26_bm_dir "${SATURN_BENCH_DIR}" ABSOLUTE)

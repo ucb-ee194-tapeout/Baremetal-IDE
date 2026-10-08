@@ -45,11 +45,16 @@ extern "C" {
 // system clock frequency in Hz
 // [DTS] cbus/pbus/sbus/mbus/fbus_clock clock-frequency = <500000000>
 // (EE290BaseConfig: With*BusFrequency(500.0), WithHarnessBinderClockFreqMHz(500.0))
+// Override for other clocks (e.g. an FPGA build): -DSYS_CLK_FREQ=<Hz> -DMTIME_FREQ=<Hz>
+#ifndef SYS_CLK_FREQ
 #define SYS_CLK_FREQ   500000000
+#endif
 
 // CLINT time base frequency in Hz
 // [DTS] cpus/timebase-frequency = <500000>
+#ifndef MTIME_FREQ
 #define MTIME_FREQ     500000
+#endif
 
 
 // ================================
