@@ -30,7 +30,7 @@ option(BAREMETAL_BUILD_RISCV        "Build for RISC-V platform"               ON
 option(BAREMETAL_BUILD_X86          "Build for x86 platform"                  OFF )
 
 option(CHIP                         "Build for a specific platform"           OFF )
-set(LINKER                          "" CACHE STRING "Linker script variant (e.g. sims, chip): platform/<chip>/<chip>-<LINKER>.ld if it exists")
+set(LINKER                         "" CACHE STRING "Linker script variant (e.g. sims, chip, flash)")
 
 option(PROF_COV                     "Build with profiling and coverage"       OFF )
 option(GCNO_ONLY                    "Only build gcno files"                   OFF )
@@ -38,10 +38,9 @@ option(USE_PGO                      "Build with profile guided optimization"  OF
 option(OPT_INFO                     "Build with optimization information"      OFF )
 
 option(USE_FREERTOS                 "Build with FreeRTOS"                     OFF )
-# NOTE: gemmelos-bringup defaults ENABLE_RVV to ON. Here it defaults to OFF so that every
-# existing platform keeps building for rv64imafd unless RVV is asked for explicitly.
-option(ENABLE_RVV                   "Build for RVV targets"                   OFF )
-set(RVV_TYPE                        "" CACHE STRING "RVV mode: 0=No RVV (rv64imafd), 1=RVV (rv64gcv_zfh), 2=RVV+Zvfh (rv64gcv_zfh_zvfh)")
+# OFF (gemmelos-bringup: ON) so existing platforms keep building for rv64imafd by default
+option(ENABLE_RVV                   "Build for RVV targets"                   OFF)
+set(RVV_TYPE                        "" CACHE STRING "RVV mode: 0=No RVV, 1=RVV (rv64gcv_zfh), 2=RVV+Zvfh (rv64gcv_zfh_zvfh)")
 set_property(CACHE RVV_TYPE PROPERTY STRINGS 0 1 2)
 
 # Specify whether we are trying to run on the physical chip or in sims/spike
@@ -62,10 +61,9 @@ set(CMAKE_EXECUTABLE_SUFFIX            ".elf")
 
 # CPU architecture
 # RVV_TYPE takes precedence when provided:
-#   0 -> no RVV (rv64imafd)
-#   1 -> RVV (rv64gcv_zfh)
-#   2 -> RVV + Zvfh (rv64gcv_zfh_zvfh; f16 vector capable toolchain/ISA required)
-# Otherwise ENABLE_RVV=ON selects mode 1 and ENABLE_RVV=OFF (the default) selects mode 0.
+#   0 -> no RVV
+#   1 -> existing RVV config
+#   2 -> RVV + Zvfh (f16 vector capable toolchain/ISA required)
 if (NOT RVV_TYPE STREQUAL "")
   set(_RVV_MODE "${RVV_TYPE}")
 else()
@@ -97,15 +95,13 @@ set(SPEC_FLAGS          -specs=${SPECS})
 
 
 # convert CHIP to lowercase
-# (quoted: the Makefile passes `-DCHIP=` when CHIP is unset, and an unquoted empty
-# ${CHIP} made string() fail with "no output variable specified")
-string(TOLOWER "${CHIP}" CHIP)
+string(TOLOWER ${CHIP} CHIP)
 string(TOLOWER "${PLATFORM}" PLATFORM_LOWER)
 
 # Resolve linker variant:
 # - If LINKER is explicitly provided, honor it.
-# - Otherwise derive it from PLATFORM.
-if ((LINKER STREQUAL "") OR (LINKER STREQUAL "OFF") OR (LINKER STREQUAL "off"))
+# - Otherwise derive from PLATFORM to avoid accidental "-off.ld".
+if ((NOT DEFINED LINKER) OR (LINKER STREQUAL "") OR (LINKER STREQUAL "OFF") OR (LINKER STREQUAL "off"))
   if (PLATFORM_LOWER STREQUAL "sims")
     set(LINKER "sims")
   else()
@@ -119,7 +115,8 @@ message(STATUS "Resolved linker variant LINKER=${LINKER} (PLATFORM=${PLATFORM})"
 # HACK: ideally this should be handled by glossy, but currently i couldn't 
 # figure out a way to propagate the LINKER_SCRIPT variable to the compile and link commands
 # CHIP unset and CHIP=default are the same thing: the generic platform in platform/default,
-# linked with glossy.ld (platform/default has no default.ld of its own).
+# linked with glossy.ld. (platform/default has no default.ld of its own, so an explicit
+# -DCHIP=default must NOT fall into the per-chip branch below.)
 if ((NOT CHIP) OR (CHIP STREQUAL "default"))
   message(STATUS "Chip not specified, using default configuration")
   set(CHIP "default")
@@ -127,12 +124,14 @@ if ((NOT CHIP) OR (CHIP STREQUAL "default"))
   set(LINKER_SCRIPT       "${CMAKE_SOURCE_DIR}/glossy/glossy.ld")
 else()
   set(LINKER_SCRIPT       "${CMAKE_SOURCE_DIR}/platform/${CHIP}/${CHIP}.ld")
-  # Honor a linker variant when the file exists: LINKER=<v> -> platform/<chip>/<chip>-<v>.ld.
+  # Honor a linker variant when the file exists: LINKER=<v> -> platform/<chip>/<chip>-<v>.ld
   # Falls back to the default <chip>.ld otherwise, so existing builds are unchanged.
   if (EXISTS "${CMAKE_SOURCE_DIR}/platform/${CHIP}/${CHIP}-${LINKER}.ld")
     set(LINKER_SCRIPT     "${CMAKE_SOURCE_DIR}/platform/${CHIP}/${CHIP}-${LINKER}.ld")
   endif()
 endif()
+
+add_subdirectory(${CMAKE_SOURCE_DIR}/platform/${CHIP})
 
 add_compile_options(-O1)
 add_compile_options(-Wall -Wextra)
@@ -180,10 +179,6 @@ if (PROF_COV)
   add_link_options(-lgcov)
 endif()
 
-# Added after the global compile/link options (as in gemmelos-bringup) so the platform's
-# chip-config library is built with the same -march/-O flags as everything else.
-add_subdirectory(${CMAKE_SOURCE_DIR}/platform/${CHIP})
-
 #################################
 # Build
 #################################
@@ -215,11 +210,8 @@ endif()
 # Build Target Directories
 #################################
 
-# penguin26 tapeout chip (Shuttle + Saturn + Atlas NPU): Atlas tests and Saturn benchmarks.
-if (CHIP STREQUAL "penguin26")
-  add_subdirectory(penguin26-tests)
-  add_subdirectory(penguin26-bmarks)
-endif()
+add_subdirectory(penguin26-tests)
+add_subdirectory(penguin26-bmarks)
 
 #################################
 # Library Installation

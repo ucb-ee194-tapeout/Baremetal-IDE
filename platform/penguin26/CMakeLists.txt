@@ -19,6 +19,9 @@ else()
   set(TERMINAL_DEVICE_UART0   ON     PARENT_SCOPE)
   set(TERMINAL_DEVICE_HTIF    OFF    PARENT_SCOPE)
   target_compile_definitions(chip-config PUBLIC -D TERMINAL_DEVICE_UART0)
+  # UART0 must be initialized before stdio works: crt0 calls __wrap_main (src/uart_stdio.c), which
+  # runs uart_init() and then the program's main(), so every program prints over UART0.
+  target_link_options(chip-config PUBLIC -Wl,--wrap=main)
 endif()
 
 # Shuttle has no LBR CSR (0x401): keep glossy's trap vector from touching it, otherwise every
