@@ -3,7 +3,8 @@
  * @brief Chipyard system-control registers on the penguin26 chip: boot-address register,
  *        tile clock gater, tile reset setter.
  *
- * Layouts come from the generated register maps (copies in bringup-chipyard/port-work/dts/):
+ * Layouts come from the register maps generated for EE290SimConfig
+ * (`make -C sims/vcs CONFIG=EE290SimConfig verilog` in Chipyard):
  *   chipyard.harness.TestHarness.EE290SimConfig.0x1000.0.regmap.json   boot-address-reg:
  *       one 64-bit field at byte offset 0x0 (8 x 8-bit regfields 0..56)
  *   chipyard.harness.TestHarness.EE290SimConfig.0x100000.0.regmap.json clock-gater:

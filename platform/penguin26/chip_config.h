@@ -6,9 +6,10 @@
  * 1x Shuttle core + Saturn vector unit (VLEN 256), Atlas NPU tile, TACIT trace, AbstractConfig
  * peripherals, all buses at 500 MHz.
  *
- * Sources (copies in bringup-chipyard/port-work/dts/):
+ * Sources (generated in Chipyard by `make -C sims/vcs CONFIG=EE290SimConfig verilog`, under
+ * sims/vcs/generated-src/chipyard.harness.TestHarness.EE290SimConfig/):
  *   [DTS]    chipyard.harness.TestHarness.EE290SimConfig.dts
- *   [MAP]    "Generated Address Map" printed by elaboration (address-map-from-elaboration.txt);
+ *   [MAP]    "Generated Address Map" printed during that elaboration;
  *            the Atlas regions are TL managers without a DTS node, so they only appear there as
  *            "exists, but undescribed by DTS: AddressRange(base, size)"
  *   [REGMAP] chipyard.harness.TestHarness.EE290SimConfig.<base>.regmap.json
