@@ -6,7 +6,8 @@
  *   - IMEM / CSR / VMEM bases and sizes: src/main/scala/atlas/scalar/ScalarCore.scala, object
  *     AtlasMemMap (IMEM_BASE 0x2_0000, IMEM_SIZE 128 KiB, CSR_BASE 0x4_0000, CSR window 4 KiB,
  *     VMEM_BASE 0x2000_0000, VMEM_SIZE 1.5 MiB). Cross-checked against the EE290SimConfig
- *     elaboration address map (port-work/dts/address-map-from-elaboration.txt).
+ *     elaboration address map ("Generated Address Map" printed by
+ *     `make -C sims/vcs CONFIG=EE290SimConfig verilog` in Chipyard).
  *   - IMEM port: src/main/scala/diplomatic/top/AtlasTile.scala imemNode: 32-bit beat,
  *     TransferSizes(1, 4), i.e. word (or smaller) accesses only.
  *   - CSR register layout: src/main/scala/diplomatic/memory/CSRFile.scala (header comment and
