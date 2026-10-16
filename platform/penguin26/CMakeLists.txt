@@ -24,6 +24,16 @@ else()
   target_link_options(chip-config PUBLIC -Wl,--wrap=main)
 endif()
 
+# Opt-in TACIT trace of every program (SIMS only; see src/tacit_trace.c). Default OFF: no change.
+option(PENGUIN26_TACIT_TRACE "penguin26: trace each program with TACIT (encoder -> sink 0 monitor file)" OFF)
+if (PENGUIN26_TACIT_TRACE)
+  if (NOT PLATFORM_UPPER STREQUAL "SIMS")
+    message(FATAL_ERROR "PENGUIN26_TACIT_TRACE needs PLATFORM=SIMS (CHIP already wraps main for UART0)")
+  endif()
+  target_compile_definitions(chip-config PUBLIC -D PENGUIN26_TACIT_TRACE)
+  target_link_options(chip-config PUBLIC -Wl,--wrap=main)
+endif()
+
 # Shuttle has no LBR CSR (0x401): keep glossy's trap vector from touching it, otherwise every
 # trap re-traps inside trap_vector and recurses until the stack overwrites memory.
 target_compile_definitions(chip-config PUBLIC -D GLOSSY_NO_LBR_CSR)
