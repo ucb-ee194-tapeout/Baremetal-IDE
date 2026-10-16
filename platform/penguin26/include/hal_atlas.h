@@ -38,6 +38,23 @@ extern "C" {
 
 #include "metal.h"
 
+/*
+ * Host performance counters (atlas-npu branch bringup_perfctr 03676e2,
+ * src/main/scala/atlas/perf/AtlasPerfCounters.scala, AtlasPerfCounterMap): a control word at
+ * 0x20 (bit 0 enable, bit 1 clear-all pulse) and 32-bit read-only counters from 0x24, in this
+ * order: the 19 ATLAS_PERF_BASE_NAMES, then 4 per MREG bank (read, write, read_contended,
+ * write_contended), then 3 per VMEM bank (read, write, contended). Host MMIO only; the Atlas
+ * scalar core cannot see them. On RTL without the counters these words read 0 and writes are
+ * ignored. See port-work/PERF_COUNTERS.md in bringup-chipyard.
+ */
+#define ATLAS_PERF_CTRL_ENABLE      (1U << 0)
+#define ATLAS_PERF_CTRL_CLEAR       (1U << 1)
+#define ATLAS_PERF_NUM_BASE         19U
+#define ATLAS_PERF_MREG_BANKS       32U   /* MregParams.numMregBanks */
+#define ATLAS_PERF_VMEM_BANKS       6U    /* AtlasMemMap.VMEM_NUM_BANKS */
+#define ATLAS_PERF_NUM_COUNTERS     (ATLAS_PERF_NUM_BASE + 4U * ATLAS_PERF_MREG_BANKS + \
+                                     3U * ATLAS_PERF_VMEM_BANKS)   /* 165 */
+
 /* CSR window, one 32-bit register per word (CSRFile.scala readWord()). */
 typedef struct {
   __IO uint32_t CYCLE;        /* 0x00 */
@@ -47,6 +64,9 @@ typedef struct {
   __IO uint32_t DBG0;         /* 0x10 */
   __IO uint32_t DBG1;         /* 0x14 */
   __IO uint32_t EXEC_CONTROL; /* 0x18 */
+  __I  uint32_t RESERVED0;    /* 0x1C */
+  __IO uint32_t PERF_CTRL;    /* 0x20 */
+  __I  uint32_t PERF[ATLAS_PERF_NUM_COUNTERS]; /* 0x24.. */
 } ATLAS_Type;
 
 #define ATLAS_EXEC_STOP             0U
@@ -89,6 +109,32 @@ static inline uint32_t atlas_is_halted(ATLAS_Type *atlas) {
 static inline ATLAS_HaltReason atlas_get_halt_reason(ATLAS_Type *atlas) {
   return (ATLAS_HaltReason)((atlas->STATUS & ATLAS_STATUS_REASON_MSK) >> ATLAS_STATUS_REASON_POS);
 }
+
+/* ---- performance counters ---- */
+/** Clear all counters and start counting (one write: clear wins that cycle, enable stays set). */
+static inline void atlas_perf_start(ATLAS_Type *atlas) {
+  atlas->PERF_CTRL = ATLAS_PERF_CTRL_CLEAR | ATLAS_PERF_CTRL_ENABLE;
+  atlas_fence();
+}
+/** Stop counting (freeze the values; reads are not snapshotted while enabled). */
+static inline void atlas_perf_stop(ATLAS_Type *atlas) {
+  atlas->PERF_CTRL = 0;
+  atlas_fence();
+}
+static inline uint32_t atlas_perf_read(ATLAS_Type *atlas, uint32_t idx) { return atlas->PERF[idx]; }
+
+/**
+ * Name of counter @p idx (e.g. "run_cycles", "mreg_bank_3_write_cycles") into @p buf.
+ * @return buf, or NULL if idx is out of range.
+ */
+const char *atlas_perf_name(uint32_t idx, char *buf, size_t len);
+
+/**
+ * Print "PERF <name>=<value>" for every nonzero counter, then "PERF_COUNT n=<ATLAS_PERF_NUM_COUNTERS>".
+ * Counters not printed are zero (output is kept short: HTIF output is slow in simulation).
+ * Call after atlas_perf_stop().
+ */
+void atlas_perf_print(ATLAS_Type *atlas);
 
 /**
  * Stop the core and clear dbg0/dbg1 (the "Stopping Atlas core before programming IMEM" step).

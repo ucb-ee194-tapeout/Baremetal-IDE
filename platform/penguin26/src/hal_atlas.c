@@ -77,3 +77,69 @@ uint32_t atlas_mem_check(const uint64_t *addrs, const uint32_t *expected, uint32
   }
   return fail;
 }
+
+static const char *const atlas_perf_base_names[ATLAS_PERF_NUM_BASE] = {
+  "run_cycles",
+  "dma_active_cycles",
+  "dma_commands",
+  "dma_beats_issued",
+  "dma_beats_completed",
+  "dma_vmem_stall_cycles",
+  "dma_saturated_cycles",
+  "dma_inflight_limit_blocked_cycles",
+  "dma_outstanding_cycles",
+  "dma_response_wait_beat_cycles",
+  "dma_fence_wait_cycles",
+  "vpu_active_cycles",
+  "vpu_commands",
+  "mxu0_compute_cycles",
+  "mxu0_data_cycles",
+  "mxu0_commands",
+  "mxu1_compute_cycles",
+  "mxu1_data_cycles",
+  "mxu1_commands",
+};
+
+static const char *const atlas_perf_mreg_kinds[4] = {
+  "read_cycles", "write_cycles", "read_contended_cycles", "write_contended_cycles",
+};
+
+static const char *const atlas_perf_vmem_kinds[3] = {
+  "read_cycles", "write_cycles", "contended_cycles",
+};
+
+const char *atlas_perf_name(uint32_t idx, char *buf, size_t len) {
+  if (idx < ATLAS_PERF_NUM_BASE) {
+    snprintf(buf, len, "%s", atlas_perf_base_names[idx]);
+    return buf;
+  }
+  idx -= ATLAS_PERF_NUM_BASE;
+  if (idx < 4U * ATLAS_PERF_MREG_BANKS) {
+    snprintf(buf, len, "mreg_bank_%u_%s", (unsigned)(idx / 4U), atlas_perf_mreg_kinds[idx % 4U]);
+    return buf;
+  }
+  idx -= 4U * ATLAS_PERF_MREG_BANKS;
+  if (idx < 3U * ATLAS_PERF_VMEM_BANKS) {
+    snprintf(buf, len, "vmem_bank_%u_%s", (unsigned)(idx / 3U), atlas_perf_vmem_kinds[idx % 3U]);
+    return buf;
+  }
+  return NULL;
+}
+
+/* Only nonzero counters are printed (plus PERF_COUNT, after which a missing name means 0): in
+ * simulation, HTIF console output costs ~200 target cycles per byte (measured with TACIT: printing all
+ * 19 base counters took ~240k cycles, almost all in htif_syscall). One printf for the whole block. */
+void atlas_perf_print(ATLAS_Type *atlas) {
+  static char out[ATLAS_PERF_NUM_COUNTERS * 56 + 32];
+  char name[48];
+  size_t n = 0;
+  for (uint32_t i = 0; i < ATLAS_PERF_NUM_COUNTERS; i++) {
+    uint32_t v = atlas_perf_read(atlas, i);
+    if (v != 0) {
+      n += (size_t)snprintf(out + n, sizeof(out) - n, "PERF %s=%u\n",
+                            atlas_perf_name(i, name, sizeof(name)), (unsigned)v);
+    }
+  }
+  snprintf(out + n, sizeof(out) - n, "PERF_COUNT n=%u\n", (unsigned)ATLAS_PERF_NUM_COUNTERS);
+  printf("%s", out);
+}
