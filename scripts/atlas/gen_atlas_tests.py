@@ -121,6 +121,9 @@ int main(void)
     }
     printf("IMEM readback OK\\n");
 
+    /* Atlas host perf counters: clear + enable right before START (see hal_atlas.h). */
+    atlas_perf_start(ATLAS);
+
     printf("Issuing Atlas START command ...\\n");
     atlas_start(ATLAS);
     atlas_fence();
@@ -131,6 +134,7 @@ int main(void)
     printf("Issuing Atlas STOP command ...\\n");
     atlas_stop(ATLAS);
     atlas_fence();
+    atlas_perf_stop(ATLAS);
 
     uint32_t cycles   = atlas_get_cycles(ATLAS);
     uint32_t instcnt  = atlas_get_instret(ATLAS);
@@ -140,6 +144,7 @@ int main(void)
     printf("  mcycles = %u\\n", cycles);
     printf("  minstret = %u\\n", instcnt);
     printf("  status  = 0x%08x\\n", status);
+    atlas_perf_print(ATLAS);
 
     if (dbg0 == 0) {
         printf("*** FAILED *** (timeout — Atlas core did not complete)\\n");
