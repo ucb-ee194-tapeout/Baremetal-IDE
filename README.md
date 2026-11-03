@@ -53,6 +53,28 @@ The same with cmake directly: `cmake -S ./ -B ./build/ -D CMAKE_TOOLCHAIN_FILE=.
 
 `PLATFORM=SIMS` prints over HTIF (Chipyard RTL simulation, `EE290SimConfig`); `PLATFORM=CHIP` prints over UART0 (115200 baud; the platform runs `uart_init` before `main`). The Atlas NPU tests are generated from `generators/atlas-npu` and need a Python with numpy, torch and numba (`EXTRA_CMAKE_ARGS="-DPENGUIN26_TESTS_ATLAS_PYTHON=<python>"`); the Saturn benchmarks are built from `generators/saturn/benchmarks`.
 
+#### Enabling the Atlas PMU
+
+The PMU defaults to off. Add `PMU_ENABLE=1` to collect counters during execution and print all final values:
+
+```bash
+make build CHIP=penguin26 PLATFORM=SIMS TARGET=atlas-tests PMU_ENABLE=1
+```
+
+Supply `PMU_MANIFEST` and `PMU_PLATFORM` to generate a matching platform header, or use an existing header with `ATLAS_PMU_HEADER`.
+
+#### Polling the PMU during execution
+
+Polling defaults to off and requires `PMU_ENABLE=1`. Add `PMU_POLL_ENABLE=1` to snapshot and read a selected counter during execution:
+
+```bash
+make build CHIP=penguin26 PLATFORM=SIMS TARGET=atlas-tests PMU_ENABLE=1 PMU_POLL_ENABLE=1
+```
+
+- `PMU_POLL_COUNTER_ID=0`: counter to read; accepts a numeric ID or `TILE_PMU_EVENT_<NAME>` from the generated header.
+- `PMU_POLL_INTERVAL=1000`: completion-loop iterations between samples.
+- `PMU_POLL_PRINT=1`: print each sample (off by default).
+
 ### Writing a new penguin26 test
 
 Copy `penguin26-tests/atlas_example/` (a minimal Atlas NPU test: loads a program into Atlas IMEM with `hal_atlas`, runs it, checks the result, prints PASS/FAIL and returns 0/1), rename the target in its `CMakeLists.txt`, and add the directory to `penguin26-tests/CMakeLists.txt`:

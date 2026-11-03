@@ -3,12 +3,12 @@
 
 Source of truth stays in atlas-npu (never edited or copied):
   <atlas-dir>/assembly/<name>.S          Atlas program (+ inline @DRAM/@CHECK_DRAM/@PERF_* directives)
-  <atlas-dir>/assembler.py               imported as a module: assemble(), golden/perf parsers
+  <atlas-dir>/atlas_asm.py               imported as a module: assemble(), golden/perf parsers
   <atlas-dir>/generators/gen_<name>.py   optional golden-data generator (stdout = JSON)
 
 For each test this writes <out-dir>/atlas_<name>.c that performs the same steps, checks,
 '*** PASSED ***' / '*** FAILED ***' messages and return codes as the harness emitted by
-assembler.py's emit_c_file(), but drives the hardware through platform/penguin26's hal_atlas
+atlas_asm.py's emit_c_file(), but drives the hardware through platform/penguin26's hal_atlas
 driver instead of raw MMIO.
 
 Generator lookup mirrors atlas-npu/baremetal/Makefile (rule `$(TESTS_DIR)/atlas_%.c`):
@@ -62,7 +62,7 @@ def c_array(words, name, ctype="uint32_t", indent="    "):
     return f"static const {ctype} {name}[] = {{\n{body}\n}};\n"
 
 
-def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, src_desc):
+def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, pmu_support=""):
     n = len(code)
     has_golden = golden is not None and (golden[1] or golden[3])
 
@@ -70,13 +70,14 @@ def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, s
  * Test: {test_name}
  * {src_desc}
  * Same steps, checks, messages and return codes as the harness emitted by
- * atlas-npu/baremetal/assembler.py (emit_c_file), driven through platform/penguin26 hal_atlas.
+ * atlas-npu/baremetal/atlas_asm.py (emit_c_file), driven through platform/penguin26 hal_atlas.
  */
 #include <stdio.h>
 #include <stdint.h>
 
 #include "chip_config.h"
 
+{pmu_support}
 #define ATLAS_PROGRAM_LEN {n}
 
 """
@@ -121,20 +122,62 @@ int main(void)
     }
     printf("IMEM readback OK\\n");
 
-    /* Atlas host perf counters: clear + enable right before START (see hal_atlas.h). */
-    atlas_perf_start(ATLAS);
+    #if PMU_ENABLE
+    uint32_t pmu_info = pmu_read32(PMU_INFO);
+    uint32_t pmu_count = PMU_INFO_COUNT(pmu_info);
+    if (PMU_INFO_VERSION(pmu_info) != 1U || pmu_count > PMU_MAX_COUNTERS) {
+        printf("*** FAILED *** (invalid PMU INFO: 0x%08x)\\n", pmu_info);
+        return 1;
+    }
+    printf("Preparing PMU (%u counters) ...\\n", pmu_count);
+    #if PMU_POLL_ENABLE
+    if (PMU_POLL_COUNTER_ID >= pmu_count) {
+        printf("*** FAILED *** (invalid PMU poll counter ID)\\n");
+        return 1;
+    }
+    #endif
+    pmu_write32(PMU_COMMAND, PMU_COMMAND_CLEAR);
+    pmu_write32(PMU_CONTROL, PMU_CONTROL_ENABLE);
+    #endif
+
+
 
     printf("Issuing Atlas START command ...\\n");
     atlas_start(ATLAS);
     atlas_fence();
 
     printf("Waiting for Atlas core to execute ...\\n");
-    uint32_t dbg0 = atlas_wait_dbg0(ATLAS, ATLAS_DEFAULT_POLL_LIMIT);
+    uint32_t dbg0 = 0;
+    for (uint32_t i = 0; i < ATLAS_DEFAULT_POLL_LIMIT; i++) {
+        #if PMU_POLL_ENABLE
+        if ((i % PMU_POLL_INTERVAL) == 0) {
+            /* Snapshot without disabling counting */
+            pmu_write32(PMU_COMMAND, PMU_COMMAND_SNAPSHOT);
+
+            uint64_t value = pmu_read_counter(PMU_POLL_COUNTER_ID);
+            (void)value;
+
+            #if PMU_POLL_PRINT
+            printf("PMU[%u] = %llu (poll=%u)\\n",
+                PMU_POLL_COUNTER_ID,
+                (unsigned long long)value, i);
+            #endif
+            }
+        #endif
+
+        /* Original completion condition */
+        dbg0 = atlas_get_dbg0(ATLAS);
+        if (dbg0 != 0) break;
+    }
+
+
 
     printf("Issuing Atlas STOP command ...\\n");
     atlas_stop(ATLAS);
     atlas_fence();
-    atlas_perf_stop(ATLAS);
+    #if PMU_ENABLE
+    atlas_pmu_snapshot_and_print(pmu_count);
+    #endif
 
     uint32_t cycles   = atlas_get_cycles(ATLAS);
     uint32_t instcnt  = atlas_get_instret(ATLAS);
@@ -144,7 +187,6 @@ int main(void)
     printf("  mcycles = %u\\n", cycles);
     printf("  minstret = %u\\n", instcnt);
     printf("  status  = 0x%08x\\n", status);
-    atlas_perf_print(ATLAS);
 
     if (dbg0 == 0) {
         printf("*** FAILED *** (timeout — Atlas core did not complete)\\n");
@@ -244,7 +286,7 @@ def generate(asm_mod, atlas_dir, name, out_dir, json_dir, python):
     perf_report = asm_mod._parse_perf_report(source)
     macs0, macs1 = asm_mod._parse_perf_macs(source)
 
-    c_src = emit_c(code, name, golden, perf_threshold, perf_report, macs0, macs1, src_desc)
+    c_src = emit_c(code, name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, asm_mod.emit_pmu_support())
     out_path = os.path.join(out_dir, f"atlas_{name}.c")
     old = None
     if os.path.exists(out_path):
@@ -279,7 +321,7 @@ def main():
         ap.error("give test names or --all")
 
     sys.path.insert(0, atlas_dir)
-    import assembler as asm_mod  # noqa: E402  (atlas-npu/baremetal/assembler.py)
+    import atlas_asm as asm_mod  # noqa: E402  (atlas-npu/baremetal/atlas_asm.py)
 
     out_dir = os.path.abspath(args.out_dir)
     json_dir = os.path.abspath(args.json_dir or os.path.join(out_dir, "json"))
