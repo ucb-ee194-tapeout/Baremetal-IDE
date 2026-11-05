@@ -62,7 +62,7 @@ def c_array(words, name, ctype="uint32_t", indent="    "):
     return f"static const {ctype} {name}[] = {{\n{body}\n}};\n"
 
 
-def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, pmu_support=""):
+def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, pmu_support="", imem_background_support=""):
     n = len(code)
     has_golden = golden is not None and (golden[1] or golden[3])
 
@@ -78,6 +78,7 @@ def emit_c(code, test_name, golden, perf_threshold, perf_report, macs0, macs1, s
 #include "chip_config.h"
 
 {pmu_support}
+{imem_background_support}
 #define ATLAS_PROGRAM_LEN {n}
 
 """
@@ -250,6 +251,9 @@ int main(void)
     }}
 }}
 """
+    if imem_background_support:
+        out = out.replace("        /* Original completion condition */",
+                          "        atlas_background_imem_write(i);\n        /* Original completion condition */")
     return out
 
 
@@ -286,7 +290,8 @@ def generate(asm_mod, atlas_dir, name, out_dir, json_dir, python):
     perf_report = asm_mod._parse_perf_report(source)
     macs0, macs1 = asm_mod._parse_perf_macs(source)
 
-    c_src = emit_c(code, name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, asm_mod.emit_pmu_support())
+    c_src = emit_c(code, name, golden, perf_threshold, perf_report, macs0, macs1, src_desc, asm_mod.emit_pmu_support(),
+                   asm_mod.emit_imem_background_support(asm_mod._parse_imem_background_words(source)))
     out_path = os.path.join(out_dir, f"atlas_{name}.c")
     old = None
     if os.path.exists(out_path):

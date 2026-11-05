@@ -79,6 +79,9 @@ foreach(_asm IN LISTS _penguin26_atlas_asm)
 
   # Generator lookup, same as atlas-npu's Makefile: gen_<name>.py, else mxu[01]_ -> mxu_.
   set(_deps "${_asm}" "${_penguin26_atlas_dir}/atlas_asm.py" "${_penguin26_atlas_gen_script}")
+  if(_name MATCHES "^dma_perf_" AND EXISTS "${_penguin26_atlas_dir}/generators/gen_dma_perf.py")
+    list(APPEND _deps "${_penguin26_atlas_dir}/generators/gen_dma_perf.py")
+  endif()
   string(REGEX REPLACE "mxu[01]_" "mxu_" _gen_base "${_name}")
   if (EXISTS "${_penguin26_atlas_dir}/generators/gen_${_name}.py")
     list(APPEND _deps "${_penguin26_atlas_dir}/generators/gen_${_name}.py")
