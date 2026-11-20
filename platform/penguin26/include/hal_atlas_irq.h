@@ -27,6 +27,13 @@
  *   - The handler runs in interrupt context with interrupts off: keep it short, no FP or vector instructions
  *     (glossy's trap entry saves the integer registers only).
  *   - atlas_irq_init() does not set mstatus.MIE: the program decides when it can be interrupted.
+ *   - Keep interrupts off around FP divide and square root (fdiv, fsqrt) in host work that overlaps an Atlas
+ *     kernel, or avoid them there. The penguin26 Shuttle starts its FP divider for an fdiv/fsqrt at commit even
+ *     when an interrupt stops it from retiring; the result is then written into its destination register while
+ *     the handler runs, with no error, and the re-executed fdiv reads that wrong value. Integer-only work and
+ *     waiting in wfi (atlas_irq_wait()) are not affected.
+ *     Fixed after tapeout: https://github.com/ucb-bar/shuttle/pull/24
+ *     The chip's condition: https://github.com/ucb-bar/shuttle/blob/a535c02dafa2cb33110873ea79265eae43931570/src/main/scala/exu/Core.scala#L897
  *
  * Timestamps. Link atlas-irq-timestamps instead of atlas-irq to also record mcycle at three points of every
  * doorbell (callback start, msip cleared, callback end); it defines ATLAS_IRQ_TIMESTAMPS for its users. atlas-irq
