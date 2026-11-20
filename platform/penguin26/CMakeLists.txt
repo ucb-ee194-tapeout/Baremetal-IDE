@@ -4,6 +4,7 @@
 
 file(GLOB_RECURSE PLATFORM_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c )
+list(REMOVE_ITEM PLATFORM_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/hal_atlas_irq.c)   # built below, opt-in
 add_library(chip-config STATIC chip.c ${PLATFORM_FILES})
 
 target_compile_options(chip-config PUBLIC ${ARCH_FLAGS} ${SPEC_FLAGS})
@@ -40,3 +41,13 @@ target_link_libraries(chip-config PUBLIC plic)
 target_link_libraries(chip-config PUBLIC htif)
 target_link_libraries(chip-config PUBLIC uart)
 target_link_libraries(chip-config PUBLIC l_trace_encoder)
+
+# The Atlas doorbell interrupt (include/hal_atlas_irq.h), opt-in: a program links atlas-irq, or atlas-irq-timestamps
+# to also record mcycle timestamps of every doorbell. It defines glossy's machine_software_interrupt_callback, so it
+# is not part of chip-config: programs that do not use it keep glossy's default.
+add_library(atlas-irq STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/hal_atlas_irq.c)
+target_link_libraries(atlas-irq PUBLIC chip-config)
+add_library(atlas-irq-timestamps STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/hal_atlas_irq.c)
+target_compile_definitions(atlas-irq-timestamps PUBLIC ATLAS_IRQ_TIMESTAMPS)
+target_link_libraries(atlas-irq-timestamps PUBLIC chip-config)
+
